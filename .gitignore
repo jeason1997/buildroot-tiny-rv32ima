@@ -18,3 +18,5 @@ goodies/coremark/coremark-1.01/
 
 goodies/duktape/duktape*
 goodies/duktape/duktape-2.7.0/
+
+host_emu/mini-rv32ima

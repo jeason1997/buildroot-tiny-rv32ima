@@ -27,9 +27,14 @@ images : everything
 	cp buildroot/output/images/Image images/
 	cp buildroot/output/images/rootfs.ext2 images/rootfs
 
+run_emu : images
+	make -C host_emu
+	host_emu/mini-rv32ima -f images/Image -B images/rootfs
+
 clean:
 	make -C goodies/hello_linux clean
 	make -C goodies/coremark clean
 	make -C goodies/c4 clean
 	make -C goodies/duktape clean 
+	make -C host_emu clean 
 	rm -rf images linux_toolchain buildroot *.tar.gz
