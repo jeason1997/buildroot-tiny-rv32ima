@@ -14,7 +14,7 @@ const char default_kernel[] = "kernel";
 const char default_block[] = "rootfs";
 const char default_cmdline[] = "console=hvc0 root=fe00";
 
-// Just default RAM amount is 64mb.
+// Just default RAM amount is 8MB.
 uint32_t ram_amt = 8 * 1024 * 1024;
 int fail_on_all_faults = 0;
 
@@ -75,7 +75,7 @@ struct MiniRV32IMAState *core;
 const char *kernel_command_line = default_cmdline;
 const char *snapshot_file_name = 0;
 const char *image_file_name = 0;
-
+int hibernate_request = 0;
 static void DumpState(struct MiniRV32IMAState *core, uint8_t *ram_image);
 
 /*
@@ -366,6 +366,19 @@ restart:
 		default:
 			printf("Unknown failure\n");
 			break;
+		}
+
+		if (hibernate_request && snapshot_file_name)
+		{
+			if (SaveSnapshot(snapshot_file_name, core, ram_image))
+				printf("Error saving snapshot!\n");
+			else
+				printf("\n\rSaved snapshot in \"%s\"\n\r", snapshot_file_name);
+
+			if (blk_file)
+				fclose(blk_file);
+
+			exit(0);
 		}
 	}
 
@@ -681,17 +694,7 @@ static void HandleOtherCSRWrite(uint8_t *image, uint16_t csrno, uint32_t value)
 		fflush(stdout);
 
 		if (value == '~' && image_file_name && snapshot_file_name)
-		{
-			if (SaveSnapshot(snapshot_file_name, core, ram_image))
-				printf("Error saving snapshot!\n");
-			else
-				printf("\n\rSaved snapshot in \"%s\"\n\r", snapshot_file_name);
-
-			if (blk_file)
-				fclose(blk_file);
-
-			exit(0);
-		}
+			hibernate_request = 1;
 	}
 	else if (csrno == 0x151)
 	{
@@ -736,7 +739,11 @@ static void HandleOtherCSRWrite(uint8_t *image, uint16_t csrno, uint32_t value)
 			}
 		}
 	}
-
+	else if (csrno == 0x170)
+	{
+		printf("\n\rhibernation request 0x%x\n\r", value);
+		hibernate_request = 1;
+	}
 	else
 		custom_csr_write(csrno, value);
 }

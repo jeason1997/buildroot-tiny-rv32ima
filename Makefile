@@ -1,4 +1,4 @@
-all : images
+all : snap
 
 buildroot.tar.gz :
 	wget https://buildroot.org/downloads/buildroot-2024.05.tar.gz
@@ -14,6 +14,7 @@ linux_toolchain : buildroot
 	touch linux_toolchain
 
 goodies: linux_toolchain
+	make -C goodies/hibernate deploy
 	make -C goodies/hello_linux deploy
 	make -C goodies/coremark deploy
 	make -C goodies/c4 deploy
@@ -31,7 +32,12 @@ run_emu : images
 	make -C host_emu
 	host_emu/mini-rv32ima -f images/Image -B images/rootfs
 
+snap : images
+	make -C host_emu
+	host_emu/mini-rv32ima -f images/Image -B images/rootfs -S images/snap
+
 clean:
+	make -C goodies/hibernate clean
 	make -C goodies/hello_linux clean
 	make -C goodies/coremark clean
 	make -C goodies/c4 clean
