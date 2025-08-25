@@ -1,24 +1,18 @@
 .vscode/
+*.vscode-ctags
 
 buildroot/
 buildroot.tar.gz
-
-images/
-
 linux_toolchain 
 
-goodies/hibernate/hibernate*
-
-goodies/c4/c4*
-goodies/c4/c4src/
-
-goodies/hello_linux/hello*
-
-goodies/coremark/coremark*
-goodies/coremark/*.zip
-goodies/coremark/coremark-1.01/
-
-goodies/duktape/duktape*
-goodies/duktape/duktape-2.7.0/
+images/
+build
 
 host_emu/mini-rv32ima
+
+modules/*.cmd
+modules/*.mod*
+modules/*.ko
+modules/*.o
+modules/modules.order
+modules/Module.symvers

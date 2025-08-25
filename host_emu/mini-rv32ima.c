@@ -1,5 +1,5 @@
 // Copyright 2022 Charles Lohr, you may use this file or any portions herein under any of the BSD, MIT, or CC0 licenses.
-// tvlad1234, 2024-2025 for the block device, gpio and snapshot implementation
+// tvlad1234, 2024-2025 for the block device, spi and snapshot implementation
 
 #include <stdio.h>
 #include <stdint.h>
@@ -76,6 +76,7 @@ const char *kernel_command_line = default_cmdline;
 const char *snapshot_file_name = 0;
 const char *image_file_name = 0;
 int hibernate_request = 0;
+int hibernate_on_shell = 0;
 static void DumpState(struct MiniRV32IMAState *core, uint8_t *ram_image);
 
 /*
@@ -162,6 +163,9 @@ int main(int argc, char **argv)
 				case 'S':
 					snapshot_file_name = (++i < argc) ? argv[i] : 0;
 					break;
+				case 'X':
+					hibernate_on_shell = 1;
+					break;
 				case 'd':
 					param_continue = 1;
 					fail_on_all_faults = 1;
@@ -188,7 +192,7 @@ int main(int argc, char **argv)
 	}
 	if (show_help || (image_file_name == 0 && snapshot_file_name == 0) || time_divisor <= 0)
 	{
-		fprintf(stderr, "./mini-rv32ima [parameters]\n\t-m [ram amount]\n\t-f [running image]\n\t-k [kernel command line]\n\t-b [dtb file, or 'disable']\n\t-B [block device image]\n\t-c instruction count\n\t-s single step with full processor state\n\t-t time divion base\n\t-l lock time base to instruction count\n\t-p disable sleep when wfi\n\t-d fail out immediately on all faults\n");
+		fprintf(stderr, "./mini-rv32ima [parameters]\n\t-m [ram amount]\n\t-f [running image]\n\t-k [kernel command line]\n\t-b [dtb file, or 'disable']\n\t-B [block device image]\n\t-S [snapshot file]\n\t-X hibernate on reaching shell (when using -S)\n\t-c instruction count\n\t-s single step with full processor state\n\t-t time divion base\n\t-l lock time base to instruction count\n\t-p disable sleep when wfi\n\t-d fail out immediately on all faults\n");
 		return 1;
 	}
 
@@ -291,14 +295,6 @@ restart:
 			// Load a default dtb.
 			dtb_ptr = ram_amt - sizeof(default64mbdtb) - sizeof(struct MiniRV32IMAState);
 			memcpy(ram_image + dtb_ptr, default64mbdtb, sizeof(default64mbdtb));
-			if (kernel_command_line)
-			{
-				const char *c = kernel_command_line;
-				uint32_t ptr = dtb_ptr + 0xc0;
-				do
-					MINIRV32_STORE1(ptr++, *(c++));
-				while (*(c - 1));
-			}
 		}
 
 		// The core lives at the end of RAM.
@@ -308,18 +304,34 @@ restart:
 		core->regs[11] = dtb_ptr ? (dtb_ptr + MINIRV32_RAM_IMAGE_OFFSET) : 0; // dtb_pa (Must be valid pointer) (Should be pointer to dtb)
 		core->extraflags |= 3;												  // Machine-mode.
 
-		if (dtb_file_name == 0)
+		// DTB RAM size patching, specified ammount in DTB must be 0x3ffc000
+		for (int i = dtb_ptr; i < ram_amt; i += 4)
 		{
-			// Update system ram size in DTB (but if and only if we're using the default DTB)
-			// Warning - this will need to be updated if the skeleton DTB is ever modified.
-			uint32_t dtbram = MINIRV32_LOAD4(dtb_ptr + 0x13c); // dtb[0x13c];
+			uint32_t dtbram = MINIRV32_LOAD4(i); // dtb[0x13c];
 
 			if (dtbram == 0x00c0ff03)
 			{
 				uint32_t validram = dtb_ptr;
 				dtbram = (validram >> 24) | (((validram >> 16) & 0xff) << 8) | (((validram >> 8) & 0xff) << 16) | ((validram & 0xff) << 24);
-				MINIRV32_STORE4(dtb_ptr + 0x13c, dtbram);
+				MINIRV32_STORE4(i, dtbram);
+				break;
 			}
+		}
+
+		if (kernel_command_line)
+		{
+			printf("patch dtb\n");
+			const char *c = kernel_command_line;
+
+			uint32_t ptr = dtb_ptr;
+
+			while (MINIRV32_LOAD4(++ptr) != 0x64636261 && ptr < ram_amt)
+				;
+
+			printf("0x%04x\n", ptr - dtb_ptr);
+			do
+				MINIRV32_STORE1(ptr++, *(c++));
+			while (*(c - 1));
 		}
 	}
 }
@@ -599,62 +611,40 @@ static uint32_t HandleControlLoad(uint32_t addy)
 	return 0;
 }
 
-uint8_t gpio_data, gpio_dir;
+uint8_t spi_tx_data, spi_rx_data;
 
 static void custom_csr_write(uint16_t csrno, uint32_t value)
 {
-	// 0x160 : direction write register
-	if (csrno == 0x160)
+	// 0x180 : chip select register
+	if (csrno == 0x180)
 	{
-		uint8_t diff = gpio_dir ^ value;
-		gpio_dir = value;
-
-		for (int i = 0; i < 8; i++)
-		{
-			if (diff & 1)
-			{
-				if (value & 1)
-					printf("[emu] Pin %d OUTPUT\n", i);
-				else
-					printf("[emu] Pin %d INPUT\n", i);
-			}
-
-			value = value >> 1;
-			diff = diff >> 1;
-		}
+		if (value)
+			printf("[emu] SPI select\n");
+		else
+			printf("[emu] SPI deselect\n");
 	}
 
-	// 0x161 : data write register
-	else if (csrno == 0x161)
+	// 0x181 : initiate SPI transfer
+	else if (csrno == 0x181)
 	{
-		uint8_t diff = gpio_data ^ value;
-		gpio_data = value;
+		// do transfer here
+		spi_rx_data = 2;
 
-		for (int i = 0; i < 8; i++)
-		{
-			if (diff & 1)
-			{
-				if (value & 1)
-					printf("[emu] Pin %d HIGH\n", i);
-				else
-					printf("[emu] Pin %d LOW\n", i);
-			}
+		printf("[emu] SPI transfer Tx 0x%02x Rx 0x%02x\n", spi_tx_data, spi_rx_data);
+	}
 
-			value = value >> 1;
-			diff = diff >> 1;
-		}
+	// 0x182 : tx data register
+	else if (csrno == 0x182)
+	{
+		spi_tx_data = value;
 	}
 }
 
 static uint32_t custom_csr_read(uint16_t csrno)
 {
-	// 0x162 : direction read register
-	if (csrno == 0x162)
-		return gpio_dir;
-
-	// 0x162 : data read register
-	else if (csrno == 0x163)
-		return gpio_data;
+	// 0x183 : rx data register
+	if (csrno == 0x183)
+		return spi_rx_data;
 
 	else
 		return 0;
@@ -693,7 +683,7 @@ static void HandleOtherCSRWrite(uint8_t *image, uint16_t csrno, uint32_t value)
 		putchar(value);
 		fflush(stdout);
 
-		if (value == '~' && image_file_name && snapshot_file_name)
+		if (hibernate_on_shell && value == '~' && image_file_name && snapshot_file_name)
 			hibernate_request = 1;
 	}
 	else if (csrno == 0x151)

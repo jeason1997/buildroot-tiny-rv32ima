@@ -15,27 +15,12 @@
 
 # Startup the system
 # ::sysinit:/bin/mount -o remount, rw /
-# ::sysinit:/bin/mkdir -p /run/lock/subsys /dev/shm /dev/pts
-# ::sysinit:/bin/mount -t sysfs sysfs /sys
-# ::sysinit:/bin/mount -t configfs none /mnt/config
 ::sysinit:/bin/mount -a
-# ::sysinit:/bin/hostname -F /etc/hostname
-# now run any rc scripts
-# Not using rc scripts.
-# ::sysinit:/etc/init.d/rcS
+::sysinit:/etc/load_modules.sh
 
-# Put a getty on the serial port
-# console::sysinit:echo "Booting the system took:"
-# console::sysinit:cat /proc/uptime
-# console::sysinit:echo "Welcome to tiny-rv32ima Linux"
+# Put a console on the serial port
 console::respawn:/bin/sh
-# console::respawn:/usr/bin/turtle_demo
 # console::respawn:/bin/login -f root
 
-# Stuff to do for the 3-finger salute
-#::ctrlaltdel:/sbin/reboot
-
-# Stuff to do before rebooting  -> No RC Scripts.
-# ::shutdown:/etc/init.d/rcK
-#::shutdown:/sbin/swapoff -a
+# Stuff to do before rebooting
 ::shutdown:/bin/umount -a -r
