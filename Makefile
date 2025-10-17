@@ -1,13 +1,13 @@
 all : images
 
-buildroot.tar.gz :
-	wget https://buildroot.org/downloads/buildroot-2024.05.tar.gz
-	mv buildroot-2024.05.tar.gz buildroot.tar.gz
+# buildroot.tar.gz :
+# 	wget https://buildroot.org/downloads/buildroot-2024.05.tar.gz
+# 	mv buildroot-2024.05.tar.gz buildroot.tar.gz
 
 buildroot : buildroot.tar.gz
-	tar -xvf buildroot.tar.gz
-	mv buildroot-2024.05 buildroot
-	# make -C buildroot BR2_EXTERNAL=../buildroot_overlay/ tinyrv32ima_defconfig
+# 	tar -xvf buildroot.tar.gz
+# 	mv buildroot-2024.05 buildroot
+	make -C buildroot BR2_EXTERNAL=../buildroot_overlay/ tinyrv32ima_defconfig
 
 linux_toolchain : buildroot
 	make -C buildroot
