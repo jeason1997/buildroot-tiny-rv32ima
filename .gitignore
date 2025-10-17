@@ -1,11 +1,10 @@
 .vscode/
 *.vscode-ctags
 
-buildroot/
+buildroot2/
 buildroot.tar.gz
 linux_toolchain 
 
-images/
 build
 
 host_emu/mini-rv32ima
